@@ -1,6 +1,6 @@
 # SOL Agent
 
-ایجنت تلگرامی فارسی‌محور با **TypeScript + Bun + grammY**؛ فقط با زبان طبیعی کار می‌کنه (بدون دستور). مدل: **Claude**، **Gemini** یا هر **پروایدر سازگار با OpenAI** — مثل OpenAI، DeepSeek، Groq، OpenRouter، Mistral، Together، xAI، **OpenCode Zen (رایگان)**، Kimi، Kilo و Cloudflare Workers AI — یا هر **پروایدر کاستوم** با ست کردن `OPENAI_BASE_URL` (با مسیریابی بین مدل ارزون و قوی و جایگزین خودکار).
+ایجنت تلگرامی فارسی‌محور با **TypeScript + Bun + grammY**؛ فقط با زبان طبیعی کار می‌کنه (بدون دستور). مدل: **OpenCode Zen (رایگان، پیش‌فرض)**، **Claude**، **Gemini** یا هر **پروایدر سازگار با OpenAI** — مثل OpenAI، DeepSeek، Groq، OpenRouter، Mistral، Together، xAI، **OpenCode Zen (رایگان)**، Kimi، Kilo و Cloudflare Workers AI — یا هر **پروایدر کاستوم** با ست کردن `OPENAI_BASE_URL` (با مسیریابی بین مدل ارزون و قوی و جایگزین خودکار).
 
 ```bash
 bun install

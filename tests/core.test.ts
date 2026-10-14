@@ -39,10 +39,13 @@ describe("config", () => {
     expect(config.ADMIN_IDS).toEqual([1, 2]);
     expect(config.PUBLIC_ACCESS).toBe(true);
     expect(config.MAX_TOOL_STEPS).toBe(8);
-    expect(config.LLM_MODEL_RESOLVED).toBe("claude-sonnet-5-5");
+    expect(config.LLM_MODEL_RESOLVED).toBe("kimi-k2.5"); // default provider is now opencode (free)
   });
   test("rejects missing keys", () => {
-    expect(() => loadConfig({ BOT_TOKEN: env.BOT_TOKEN })).toThrow(/ANTHROPIC_API_KEY/);
+    expect(() => loadConfig({ BOT_TOKEN: env.BOT_TOKEN, LLM_PROVIDER: "anthropic" })).toThrow(/ANTHROPIC_API_KEY/);
+    expect(() => loadConfig({ BOT_TOKEN: env.BOT_TOKEN, LLM_PROVIDER: "gemini" })).toThrow(/GEMINI_API_KEY/);
+    expect(() => loadConfig({ BOT_TOKEN: env.BOT_TOKEN, LLM_PROVIDER: "openai" })).toThrow(/OPENAI_API_KEY/);
+    expect(loadConfig({ BOT_TOKEN: env.BOT_TOKEN }).LLM_PROVIDER).toBe("opencode"); // opencode needs no key
     expect(() => loadConfig({})).toThrow(/BOT_TOKEN/);
     expect(loadConfig({ BOT_TOKEN: env.BOT_TOKEN, LLM_PROVIDER: "gemini", GEMINI_API_KEY: "abcdefgh12345" }).LLM_MODEL_RESOLVED).toContain("gemini");
   });

@@ -93,11 +93,17 @@ export class OpenAICompatibleLLM implements LLM {
 
   private url() { return `${this.baseUrl.replace(/\/+$/, "")}/chat/completions`; }
 
+  private headers(): Record<string, string> {
+    const h: Record<string, string> = { "content-type": "application/json", ...this.extraHeaders };
+    if (this.apiKey) h.authorization = `Bearer ${this.apiKey}`; // some gateways (e.g. OpenCode Zen free tier) work keyless
+    return h;
+  }
+
   async chat(req: LLMRequest): Promise<LLMResponse> {
     const stream = !!req.onText;
     const res = await fetchRetry(this.url(), {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}`, ...this.extraHeaders },
+      headers: this.headers(),
       body: JSON.stringify(buildOpenAIBody(this.model, req, stream)),
     }, { timeoutMs: stream ? 180_000 : 120_000 });
 

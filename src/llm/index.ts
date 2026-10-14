@@ -48,7 +48,11 @@ export class RoutedLLM implements LLM {
   }
 }
 
-export type LLMProvider = "anthropic" | "gemini" | "openai";
+export type LLMProvider = "anthropic" | "gemini" | "openai" | "opencode";
+
+/** OpenCode Zen: free OpenAI-compatible gateway (https://opencode.ai/zen). Works without a key (shared rate limit); OPENCODE_API_KEY lifts it. */
+export const OPENCODE_BASE_URL = "https://opencode.ai/zen/v1";
+export const OPENCODE_DEFAULT_MODEL = "kimi-k2.5";
 
 /**
  * Hot-swappable LLM: delegates every chat() to the current inner LLM.
@@ -73,18 +77,21 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   anthropic: "claude-sonnet-5-5",
   gemini: "gemini-2.5-flash",
   openai: "gpt-5-mini",
+  opencode: OPENCODE_DEFAULT_MODEL,
 };
 
 const STRONG_DEFAULT_MODEL: Record<LLMProvider, string> = {
   anthropic: "claude-sonnet-5-5",
   gemini: "gemini-2.5-flash",
   openai: "gpt-5-mini",
+  opencode: OPENCODE_DEFAULT_MODEL,
 };
 
 const FAST_DEFAULT_MODEL: Record<LLMProvider, string> = {
   anthropic: "claude-haiku-5-5",
   gemini: "gemini-2.5-flash-lite",
   openai: "gpt-5-nano",
+  opencode: OPENCODE_DEFAULT_MODEL,
 };
 
 export interface ResolvedLlm {
@@ -118,6 +125,10 @@ function makeFromResolved(r: ResolvedLlm, c: Config): LLM {
   if (r.provider === "openai") {
     if (!r.apiKey) throw new Error("OPENAI_API_KEY (or panel API key) is required for the openai provider");
     return new OpenAICompatibleLLM(r.apiKey, r.model, r.baseUrl!);
+  }
+  if (r.provider === "opencode") {
+    const key = r.apiKey || c.OPENCODE_API_KEY || "";
+    return new OpenAICompatibleLLM(key, r.model, OPENCODE_BASE_URL);
   }
   return new AnthropicLLM(c.ANTHROPIC_API_KEY!, r.model);
 }

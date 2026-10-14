@@ -37,7 +37,7 @@ const str = (d?: string) => z.string().optional().transform((v) => (v && v.trim(
 
 const schema = z.object({
   BOT_TOKEN: z.string().min(20, "BOT_TOKEN is required"),
-  LLM_PROVIDER: z.enum(["anthropic", "gemini", "openai"]).optional().transform((v) => v ?? "anthropic"),
+  LLM_PROVIDER: z.enum(["anthropic", "gemini", "openai", "opencode"]).optional().transform((v) => v ?? "opencode"),
   LLM_MODEL: str(),
   ANTHROPIC_API_KEY: str(),
   GEMINI_API_KEY: str(),
@@ -57,6 +57,7 @@ const schema = z.object({
   WEBHOOK_SECRET: str(),
   PORT: int(8080),
   OPENAI_API_KEY: str(),
+  OPENCODE_API_KEY: str(), // optional: personal key lifts Zen free-tier rate limits
   STT_PROVIDER: z.enum(["auto", "gemini", "openai"]).optional().transform((v) => v ?? "auto"),
   STT_MODEL: str(),
   MAX_GIFTS_PER_DAY: int0(3),
@@ -64,7 +65,7 @@ const schema = z.object({
   // --- model routing, fallback, cost ---
   LLM_MODEL_FAST: str(),
   ROUTER: bool(true),
-  FALLBACK_PROVIDER: z.enum(["anthropic", "gemini", "openai"]).optional(),
+  FALLBACK_PROVIDER: z.enum(["anthropic", "gemini", "openai", "opencode"]).optional(),
   FALLBACK_MODEL: str(),
   MODEL_PRICES: str(),
   DAILY_BUDGET_USD: z.string().optional().transform((v) => (v ? Number(v) : 0)).pipe(z.number().min(0)),
@@ -142,10 +143,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (c.LLM_PROVIDER === "gemini" && !c.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is required when LLM_PROVIDER=gemini");
   if (c.LLM_PROVIDER === "openai" && !c.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required when LLM_PROVIDER=openai");
   if (c.FALLBACK_PROVIDER === "openai" && !c.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required when FALLBACK_PROVIDER=openai");
+  // opencode (OpenCode Zen) works without a key
   if (c.WEBHOOK_URL && !/^https:\/\//i.test(c.WEBHOOK_URL)) throw new Error("WEBHOOK_URL must start with https://");
   const names = [...new Set([c.BOT_NAME!, ...(c.BOT_NAMES ?? "").split(",")].map((x) => x.trim()).filter(Boolean))];
-  const defaultModel = c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash" : "gpt-5-mini";
-  const defaultFast = c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash-lite" : "gpt-5-nano";
+  const defaultModel = c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash" : c.LLM_PROVIDER === "opencode" ? "kimi-k2.5" : "gpt-5-mini";
+  const defaultFast = c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash-lite" : c.LLM_PROVIDER === "opencode" ? "kimi-k2.5" : "gpt-5-nano";
   const model = c.LLM_MODEL ?? defaultModel;
   const fast = c.LLM_MODEL_FAST ?? defaultFast;
   const dataDir = path.resolve(c.DATA_DIR!);
@@ -154,7 +156,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 
 /** Values that must never appear in any output sent to users. */
 export function secretValues(c: Config): string[] {
-  return [c.BOT_TOKEN, c.ANTHROPIC_API_KEY, c.GEMINI_API_KEY, c.BRAVE_API_KEY, c.GITHUB_TOKEN, c.VIRUSTOTAL_API_KEY, c.OPENAI_API_KEY, c.WEBHOOK_SECRET, c.BACKUP_PASSPHRASE, c.BACKUP_S3_ACCESS_KEY, c.BACKUP_S3_SECRET_KEY].filter(
+  return [c.BOT_TOKEN, c.ANTHROPIC_API_KEY, c.GEMINI_API_KEY, c.BRAVE_API_KEY, c.GITHUB_TOKEN, c.VIRUSTOTAL_API_KEY, c.OPENAI_API_KEY, c.OPENCODE_API_KEY, c.WEBHOOK_SECRET, c.BACKUP_PASSPHRASE, c.BACKUP_S3_ACCESS_KEY, c.BACKUP_S3_SECRET_KEY].filter(
     (x): x is string => !!x && x.length >= 8,
   );
 }

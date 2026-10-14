@@ -30,6 +30,7 @@ export function setLlmSettings(store: Store, s: LlmSettings): void {
 
 /** Provider options for the admin panel UI. */
 export const PROVIDER_OPTIONS: { value: LLMProvider; label: string }[] = [
+  { value: "opencode", label: "OpenCode Zen (free) 🆓" },
   { value: "anthropic", label: "Claude (Anthropic)" },
   { value: "gemini", label: "Gemini (Google)" },
   { value: "openai", label: "OpenAI-compatible" },
@@ -55,14 +56,15 @@ export const OPENAI_PRESETS: PresetOption[] = [
 /** Effective settings: DB overrides merged over env config. Never exposes the raw key. */
 export function effectiveLlmView(config: Config, s: LlmSettings) {
   const provider = s.provider ?? config.LLM_PROVIDER;
+  const isOpenAI = provider === "openai" || provider === "opencode";
   return {
     provider,
     model: s.model ?? config.LLM_MODEL_RESOLVED,
     modelFast: s.modelFast ?? config.LLM_MODEL_FAST_RESOLVED,
     router: config.ROUTER,
-    baseUrl: provider === "openai" ? (s.baseUrl ?? config.OPENAI_BASE_URL) : null,
-    hasApiKey: provider === "openai" ? !!(s.apiKey ?? config.OPENAI_API_KEY) : true,
-    apiKeyMasked: provider === "openai" ? mask(s.apiKey ?? config.OPENAI_API_KEY) : null,
+    baseUrl: provider === "openai" ? (s.baseUrl ?? config.OPENAI_BASE_URL) : provider === "opencode" ? "https://opencode.ai/zen/v1" : null,
+    hasApiKey: isOpenAI ? !!(s.apiKey ?? config.OPENAI_API_KEY ?? config.OPENCODE_API_KEY) : true,
+    apiKeyMasked: isOpenAI ? mask(s.apiKey ?? config.OPENAI_API_KEY ?? config.OPENCODE_API_KEY) : null,
     fallbackProvider: s.fallbackProvider ?? config.FALLBACK_PROVIDER ?? null,
     fallbackModel: s.fallbackModel ?? config.FALLBACK_MODEL ?? null,
     isOverridden: Object.keys(s).length > 0,
@@ -76,12 +78,12 @@ function mask(k?: string): string | null {
 
 /** Validate settings from the panel before saving. Returns an error string or null. */
 export function validateLlmSettings(s: LlmSettings): string | null {
-  if (s.provider && !["anthropic", "gemini", "openai"].includes(s.provider)) return "unknown provider";
+  if (s.provider && !["anthropic", "gemini", "openai", "opencode"].includes(s.provider)) return "unknown provider";
   if (s.provider === "openai") {
     if (s.baseUrl !== undefined && s.baseUrl !== "" && !/^https?:\/\//i.test(s.baseUrl)) return "base URL must start with http(s)://";
     if (s.apiKey !== undefined && s.apiKey !== "" && s.apiKey.length < 8) return "API key looks too short";
   }
-  if (s.fallbackProvider && !["anthropic", "gemini", "openai"].includes(s.fallbackProvider)) return "unknown fallback provider";
+  if (s.fallbackProvider && !["anthropic", "gemini", "openai", "opencode"].includes(s.fallbackProvider)) return "unknown fallback provider";
   for (const f of ["model", "modelFast", "fallbackModel"] as const) {
     const v = s[f];
     if (v !== undefined && (typeof v !== "string" || v.length > 120)) return `bad ${f}`;
