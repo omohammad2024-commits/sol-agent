@@ -52,7 +52,7 @@ export type LLMProvider = "anthropic" | "gemini" | "openai" | "opencode";
 
 /** OpenCode Zen: free OpenAI-compatible gateway (https://opencode.ai/zen). Works without a key (shared rate limit); OPENCODE_API_KEY lifts it. */
 export const OPENCODE_BASE_URL = "https://opencode.ai/zen/v1";
-export const OPENCODE_DEFAULT_MODEL = "kimi-k2.5";
+export const OPENCODE_DEFAULT_MODEL = "mimo-v2.6-flash-free";
 
 /**
  * Hot-swappable LLM: delegates every chat() to the current inner LLM.

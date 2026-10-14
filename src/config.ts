@@ -146,8 +146,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   // opencode (OpenCode Zen) works without a key
   if (c.WEBHOOK_URL && !/^https:\/\//i.test(c.WEBHOOK_URL)) throw new Error("WEBHOOK_URL must start with https://");
   const names = [...new Set([c.BOT_NAME!, ...(c.BOT_NAMES ?? "").split(",")].map((x) => x.trim()).filter(Boolean))];
-  const defaultModel = c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash" : c.LLM_PROVIDER === "opencode" ? "kimi-k2.5" : "gpt-5-mini";
-  const defaultFast = c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash-lite" : c.LLM_PROVIDER === "opencode" ? "kimi-k2.5" : "gpt-5-nano";
+  const defaultModel = c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash" : c.LLM_PROVIDER === "opencode" ? "mimo-v2.6-flash-free" : "gpt-5-mini";
+  const defaultFast = c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash-lite" : c.LLM_PROVIDER === "opencode" ? "mimo-v2.6-flash-free" : "gpt-5-nano";
   const model = c.LLM_MODEL ?? defaultModel;
   const fast = c.LLM_MODEL_FAST ?? defaultFast;
   const dataDir = path.resolve(c.DATA_DIR!);

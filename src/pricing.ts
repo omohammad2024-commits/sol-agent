@@ -25,6 +25,7 @@ export const DEFAULT_PRICES: Record<string, Price> = {
   "kimi-k2": { in: 0, out: 0 },
   "kimi-k2.5": { in: 0, out: 0 },
   "mimo-v2.5-free": { in: 0, out: 0 },
+  "mimo-v2.6-flash-free": { in: 0, out: 0 },
   "glm": { in: 0, out: 0 },
   "minimax": { in: 0, out: 0 },
 };
