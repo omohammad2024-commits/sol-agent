@@ -6,6 +6,7 @@ import { runAgent, spentToday, type AgentDeps } from "./agent";
 import { getGroupCfg, isChatAdmin, moderate, welcomeText } from "./groups";
 import { buildContext, createIO } from "./io";
 import { LiveReply } from "./live";
+import { dayKey } from "./pricing";
 import { friendlyLlmError } from "./llm/errors";
 import { log } from "./log";
 import { sttAvailable, transcribe } from "./stt";
@@ -227,13 +228,71 @@ export function createBot(deps: AgentDeps, opts: CreateBotOptions = {}) {
   };
   const track = (p: Promise<unknown>) => { const q = p.catch((e) => log.error("task_error", { error: e })).finally(() => background.delete(q)); background.add(q); };
 
+
+  /** Welcome text + main menu keyboard (shown on /start). */
+  function welcomeMessage(): string {
+    return `سلام! من ${config.BOT_NAME} هستم 👋\nدستیار هوشمند، سریع و تحلیلگر شما.\n\nهرچی می‌خوای ساده بگو: قیمت، جستجو، دانلود، ویس، گیف، سند، یادآوری، کد... خودم می‌فهمم چیکار کنم.\n\nتوی گروه هم کافیه اسمم رو صدا بزنی یا ریپلای کنی.`;
+  }
+
+  function mainMenu(): InlineKeyboard {
+    return new InlineKeyboard()
+      .text("⚙️ تنظیمات", "menu:settings").text("📜 تاریخچه", "menu:history").row()
+      .text("🔄 تلاش مجدد", "menu:retry").text("🪄 شروع مجدد", "menu:restart").row()
+      .text("📖 راهنما", "menu:help").text("📊 وضعیت سهمیه", "menu:quota");
+  }
+
   // -----------------------------------------------------------------------------------------
   // entry points
   // -----------------------------------------------------------------------------------------
   // Telegram always sends /start when someone opens the bot; everything else is plain conversation.
-  bot.command("start", (c) =>
-    c.reply(`سلام! من ${config.BOT_NAME} هستم 👋\nهرچی می‌خوای ساده بگو: قیمت، جستجو، دانلود، ویس، گیف، سند، یادآوری، کد... خودم می‌فهمم چیکار کنم.\nتوی گروه هم کافیه اسمم رو صدا بزنی. هر جا هم می‌تونی با @${bot.botInfo?.username ?? "اسم_من"} سوال بپرسی.`),
-  );
+  bot.command("start", (c) => c.reply(welcomeMessage(), { reply_markup: mainMenu() }));
+
+  /** Replace the generic "answer everything" callback with real menu handlers. */
+  bot.callbackQuery(/^menu:(settings|history|retry|restart|help|quota)$/, async (c) => {
+    await c.answerCallbackQuery();
+    if (!c.chat) return;
+    const action = c.match[1];
+    const chatId = c.chat.id;
+    const userId = c.from.id;
+    try {
+      if (action === "settings") {
+        const isAdmin = levelOf(userId) === "admin";
+        await c.reply(
+          isAdmin
+            ? `⚙️ تنظیمات\n\nپنل مدیریت کامل (مدل‌ها، کاربران، ابزارها، هزینه‌ها) از دکمه‌ی «پنل» کنار چت باز می‌شه.\nنیاز به PANEL_URL داره.`
+            : `⚙️ تنظیمات\n\nفعلاً تنظیمات خاصی برای کاربر عادی نیست. هرچی لازم داری همین‌جا بگو.`,
+        );
+      } else if (action === "history") {
+        const msgs = store.history(chatId, 5);
+        if (!msgs.length) await c.reply("📜 هنوز صحبتی ثبت نشده.");
+        else {
+          const lines = msgs.slice(-5).map((m) => `${m.role === "user" ? "👤" : "🤖"} ${truncate(m.text, 120)}`);
+          await c.reply(`📜 چند پیام آخر:\n\n${lines.join("\n\n")}`);
+        }
+      } else if (action === "retry") {
+        const msgs = store.history(chatId, 10);
+        const lastUser = [...msgs].reverse().find((m) => m.role === "user");
+        if (!lastUser) await c.reply("چیزی برای تلاش مجدد نیست.");
+        else {
+          await c.reply("🔄 دارم دوباره تلاش می‌کنم...");
+          // Re-run the agent on the last user message via a synthetic message object.
+          await onMessage({ message_id: 0, date: Math.floor(Date.now() / 1000), chat: c.chat, from: c.from, text: lastUser.text } as Message);
+        }
+      } else if (action === "restart") {
+        store.clearHistory(chatId);
+        await c.reply("🪄 حافظه‌ی گفتگو پاک شد. از اول شروع می‌کنیم! چی کمکت کنم؟", { reply_markup: mainMenu() });
+      } else if (action === "help") {
+        await c.reply(`📖 راهنما\n\nهرچی می‌خوای ساده بگو: قیمت، جستجو، دانلود، ویس، گیف، سند، یادآوری، کد... خودم می‌فهمم چیکار کنم.\n\nتوی گروه: اسمم رو صدا بزن یا ریپلای کن.\nبا @${bot.botInfo?.username ?? "اسم_من"} هم می‌تونی همه‌جا صدام کنی.`);
+      } else if (action === "quota") {
+        const cost = spentToday(deps, userId);
+        const calls = store.usageSummary(dayKey(Date.now(), config.TIMEZONE!)).calls;
+        await c.reply(`📊 وضعیت امروز\n\n💰 هزینه‌ی تخمینی: $${cost.toFixed(4)}\n🔢 درخواست‌ها: ${calls}`);
+      }
+    } catch (e) {
+      log.warn("menu_error", { action, error: e });
+      await c.reply("⚠️ یه خطا پیش اومد.").catch(() => {});
+    }
+  });
 
   bot.on("message:new_chat_members", async (c) => {
     const cfg = getGroupCfg(store, config, c.chat.id);
