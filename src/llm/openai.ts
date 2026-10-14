@@ -10,9 +10,13 @@ export const PRESET_BASE_URLS: Record<string, string> = {
   mistral: "https://api.mistral.ai/v1",
   together: "https://api.together.xyz/v1",
   xai: "https://api.x.ai/v1",
+  opencode: "https://opencode.ai/zen/v1", // OpenCode Zen: free models (Kimi, GLM, MiniMax...), tool calling supported
+  kimi: "https://api.kimi.com/coding/v1", // Moonshot Kimi Code gateway
+  kilo: "https://api.kilo.ai/api/gateway", // Kilo Code gateway (vendor/model)
   cloudflare: "https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1",
   ollama: "http://localhost:11434/v1",
   lmstudio: "http://localhost:1234/v1",
+  // "custom": set OPENAI_BASE_URL to any other OpenAI-compatible endpoint
 };
 
 function toOpenAIMessages(system: string, messages: Msg[]) {

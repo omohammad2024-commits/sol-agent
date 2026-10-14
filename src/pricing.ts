@@ -21,6 +21,12 @@ export const DEFAULT_PRICES: Record<string, Price> = {
   "qwen": { in: 0.2, out: 0.2 },
   "mistral": { in: 0.3, out: 0.9 },
   "grok": { in: 2, out: 10 },
+  // OpenCode Zen free tier (and other free gateways): $0
+  "kimi-k2": { in: 0, out: 0 },
+  "kimi-k2.5": { in: 0, out: 0 },
+  "mimo-v2.5-free": { in: 0, out: 0 },
+  "glm": { in: 0, out: 0 },
+  "minimax": { in: 0, out: 0 },
 };
 
 export function parsePrices(json: string | undefined): Record<string, Price> {
