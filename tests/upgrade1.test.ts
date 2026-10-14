@@ -8,6 +8,7 @@ import { nextCron, parseCron } from "../src/cron";
 import { cosine, localEmbed, normalizeText } from "../src/embed";
 import { AnthropicLLM, buildAnthropicBody } from "../src/llm/anthropic";
 import { GeminiLLM } from "../src/llm/gemini";
+import { OpenAICompatibleLLM, buildOpenAIBody } from "../src/llm/openai";
 import { RoutedLLM } from "../src/llm";
 import type { LLM, Part } from "../src/llm/types";
 import { addLogSink, configureLogger, log } from "../src/log";
@@ -30,6 +31,7 @@ describe("migrations", () => {
     expect(s.schemaVersion()).toBe(SCHEMA_VERSION);
   });
   test("an old v1 database is upgraded and old reminders become jobs", () => {
+    fs.mkdirSync(tmp, { recursive: true }); // tmp is shared across test files; another file's afterAll may have removed it
     const file = path.join(tmp, "old.db");
     const raw = new Database(file, { create: true });
     raw.exec("CREATE TABLE memories(id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT, owner TEXT, key TEXT, value TEXT, updated_at INTEGER);");
@@ -130,6 +132,60 @@ describe("LLM adapters: caching, streaming, usage", () => {
     expect(r.parts[0]).toEqual({ type: "text", text: "Hello" });
     expect((r.parts[1] as any).meta.thoughtSignature).toBe("s");
     expect(r.usage).toEqual({ input: 150, output: 25, cacheRead: 50, cacheWrite: 0 });
+  });
+  test("openai-compatible: body format, tool messages, usage", async () => {
+    const body: any = buildOpenAIBody("gpt-x", {
+      system: "S",
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "hi" }] },
+        { role: "assistant", parts: [{ type: "tool_call", id: "t1", name: "calculate", args: { expression: "1+1" } }] },
+        { role: "user", parts: [{ type: "tool_result", id: "t1", name: "calculate", content: "2" }] },
+      ],
+      tools,
+    }, false);
+    expect(body.model).toBe("gpt-x");
+    expect(body.messages[0]).toEqual({ role: "system", content: "S" });
+    expect(body.messages[1]).toEqual({ role: "user", content: [{ type: "text", text: "hi" }] });
+    expect(body.messages[2].tool_calls[0]).toMatchObject({ id: "t1", type: "function", function: { name: "calculate" } });
+    expect(body.messages[3]).toEqual({ role: "tool", tool_call_id: "t1", content: "2" });
+    expect(body.tools[0]).toMatchObject({ type: "function", function: { name: "a" } });
+    expect(body.tool_choice).toBe("auto");
+    expect(body.stream).toBeUndefined();
+  });
+  test("openai-compatible: non-streaming tool call + usage", async () => {
+    let url = "";
+    const r = await withFetch((u) => { url = u; return new Response(JSON.stringify({
+      model: "gpt-x-1",
+      choices: [{ message: { role: "assistant", content: "ok", tool_calls: [{ id: "c1", type: "function", function: { name: "get_time", arguments: "{\"tz\":\"UTC\"}" } }] } }],
+      usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 20 } },
+    })); }, () => new OpenAICompatibleLLM("k", "gpt-x", "https://example.com/v1").chat({ system: "S", messages: msgs, tools }));
+    expect(url).toBe("https://example.com/v1/chat/completions");
+    expect(r.parts).toEqual([{ type: "text", text: "ok" }, { type: "tool_call", id: "c1", name: "get_time", args: { tz: "UTC" } }]);
+    expect(r.usage).toEqual({ input: 50, output: 10, cacheRead: 20, cacheWrite: 0 });
+    expect(r.model).toBe("gpt-x-1");
+  });
+  test("openai-compatible: streaming text deltas + fragmented tool args", async () => {
+    const deltas: string[] = [];
+    const r = await withFetch(() => sse([
+      { data: { choices: [{ delta: { content: "He" } }] } },
+      { data: { choices: [{ delta: { content: "llo" } }] } },
+      { data: { choices: [{ delta: { tool_calls: [{ index: 0, id: "t9", function: { name: "calc", arguments: "{\"ex" } }] } }] } },
+      { data: { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "pression\":\"2*3\"}" } }] } }] } },
+      { data: "[DONE]" },
+    ]), () => new OpenAICompatibleLLM("k", "gpt-x", "https://example.com/v1").chat({ system: "S", messages: msgs, tools, onText: (d) => deltas.push(d) }));
+    expect(deltas).toEqual(["He", "llo"]);
+    expect(r.parts).toEqual([{ type: "text", text: "Hello" }, { type: "tool_call", id: "t9", name: "calc", args: { expression: "2*3" } }]);
+  });
+  test("openai-compatible: API error surfaces", async () => {
+    await expect(withFetch(() => new Response(JSON.stringify({ error: { message: "bad key" } }), { status: 401 }),
+      () => new OpenAICompatibleLLM("k", "gpt-x", "https://example.com/v1").chat({ system: "S", messages: msgs, tools: [] }))).rejects.toThrow("bad key");
+  });
+  test("config: openai provider requires key + base url, resolves defaults", () => {
+    expect(() => cfg({ LLM_PROVIDER: "openai", ANTHROPIC_API_KEY: "", GEMINI_API_KEY: "", OPENAI_API_KEY: "" })).toThrow("OPENAI_API_KEY is required");
+    const c = cfg({ LLM_PROVIDER: "openai", OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.deepseek.com/v1" });
+    expect(c.LLM_MODEL_RESOLVED).toBe("gpt-5-mini");
+    expect(c.LLM_MODEL_FAST_RESOLVED).toBe("gpt-5-nano");
+    expect(c.OPENAI_BASE_URL).toBe("https://api.deepseek.com/v1");
   });
   test("RoutedLLM: tier order, fallback, onReset, error when all fail", async () => {
     const mk = (name: string, fail: boolean): LLM & { model: string; n: number } => ({ name, model: name, n: 0, async chat() { this.n++; if (fail) throw new Error(`${name} down`); return { parts: [{ type: "text", text: name }], model: name }; } });

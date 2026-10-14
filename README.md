@@ -1,6 +1,6 @@
 # SOL Agent
 
-ایجنت تلگرامی فارسی‌محور با **TypeScript + Bun + grammY**؛ فقط با زبان طبیعی کار می‌کنه (بدون دستور). مدل: **Claude** یا **Gemini** (با مسیریابی بین مدل ارزون و قوی و جایگزین خودکار).
+ایجنت تلگرامی فارسی‌محور با **TypeScript + Bun + grammY**؛ فقط با زبان طبیعی کار می‌کنه (بدون دستور). مدل: **Claude**، **Gemini** یا هر **پروایدر سازگار با OpenAI** — مثل OpenAI، DeepSeek، Groq، OpenRouter، Mistral، Together، xAI، Cloudflare Workers AI، Ollama و LM Studio (با مسیریابی بین مدل ارزون و قوی و جایگزین خودکار).
 
 ```bash
 bun install
@@ -80,7 +80,7 @@ bun run start
 src/index.ts       راه‌اندازی (polling/webhook، پنل، MCP، بکاپ، اعلان خطا)
 src/bot.ts         گفتگو، گروه، ویس، اینلاین، سقف مصرف
 src/agent.ts       حلقه‌ی LLM↔ابزار، مسیریابی، نگهبان تزریق، حافظه‌ی مرتبط
-src/llm/           Claude/Gemini: استریم، کش، مصرف توکن، fallback
+src/llm/           Claude/Gemini/OpenAI-compatible: استریم، کش، مصرف توکن، fallback
 src/memory/        SQLite + مایگریشن
 src/embed.ts recall.ts summarizer.ts      حافظه‌ی معنایی و خلاصه‌ها
 src/cron.ts scheduler.ts tools/jobs.ts    کارهای زمان‌دار
@@ -92,18 +92,3 @@ src/backup.ts notify.ts log.ts pricing.ts عملیات
 prompts/system.md  شخصیت و قوانین
 tests/             ۱۱۱ تست
 ```
-
-## دیپلوی روی Railway
-
-1. این ریپو رو توی Railway ایمپورت کن (New Project ← Deploy from GitHub repo).
-2. Railway خودش `Dockerfile` رو پیدا می‌کنه و بیلد می‌کنه (`railway.json` هم همین رو مشخص کرده).
-3. یه **Volume** بساز و به مسیر `/data` مونت کن (دیتابیس و فایل‌ها اینجان؛ بدون Volume با هر ری‌دیپلوی داده‌ها پاک می‌شن).
-4. متغیرهای محیطی رو از روی `.env.example` توی بخش Variables ست کن. حداقل این‌ها لازمن:
-   - `BOT_TOKEN`
-   - `ANTHROPIC_API_KEY` یا `GEMINI_API_KEY` (بسته به `LLM_PROVIDER`)
-   - `OWNER_ID` (آیدی عددی تلگرام خودت)
-   - `PANEL_URL` = دامنه‌ی عمومی سرویست توی Railway (مثلاً `https://xxx.up.railway.app`) — این هم healthcheck رو فعال می‌کنه، هم پنل مدیریت رو
-   - `PORT` رو خود Railway ست می‌کنه؛ دست نزن
-5. حالت پیش‌فرض **polling**ـه و بدون نیاز به تنظیم اضافه کار می‌کنه. اگه خواستی webhook بزنی، `WEBHOOK_URL` رو هم ست کن.
-
-نکته: سرور HTTP (برای `/health` و پنل) فقط وقتی بالا میاد که `WEBHOOK_URL` یا `PANEL_URL` ست شده باشه؛ پس `PANEL_URL` رو حتماً ست کن تا healthcheck رد بشه.

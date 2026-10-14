@@ -9,6 +9,18 @@ export const DEFAULT_PRICES: Record<string, Price> = {
   "gemini-2.5-flash-lite": { in: 0.1, out: 0.4, cacheRead: 0.01 },
   "gemini-2.5-flash": { in: 0.3, out: 2.5, cacheRead: 0.03 },
   "gemini-2.5-pro": { in: 1.25, out: 10, cacheRead: 0.125 },
+  // OpenAI-compatible providers
+  "gpt-5": { in: 1.25, out: 10, cacheRead: 0.125 },
+  "gpt-5-mini": { in: 0.25, out: 2 },
+  "gpt-5-nano": { in: 0.05, out: 0.4 },
+  "gpt-4o": { in: 2.5, out: 10 },
+  "gpt-4o-mini": { in: 0.15, out: 0.6 },
+  "deepseek-chat": { in: 0.27, out: 1.1, cacheRead: 0.07 },
+  "deepseek-reasoner": { in: 0.55, out: 2.19, cacheRead: 0.14 },
+  "llama-3.3-70b": { in: 0.35, out: 0.4 },
+  "qwen": { in: 0.2, out: 0.2 },
+  "mistral": { in: 0.3, out: 0.9 },
+  "grok": { in: 2, out: 10 },
 };
 
 export function parsePrices(json: string | undefined): Record<string, Price> {

@@ -2,6 +2,7 @@ import type { Config } from "../config";
 import { log } from "../log";
 import { AnthropicLLM } from "./anthropic";
 import { GeminiLLM } from "./gemini";
+import { OpenAICompatibleLLM } from "./openai";
 import type { LLM, LLMRequest, LLMResponse } from "./types";
 
 export type { LLM } from "./types";
@@ -47,17 +48,27 @@ export class RoutedLLM implements LLM {
   }
 }
 
-function make(provider: "anthropic" | "gemini", model: string, c: Config): LLM {
-  return provider === "gemini" ? new GeminiLLM(c.GEMINI_API_KEY!, model) : new AnthropicLLM(c.ANTHROPIC_API_KEY!, model);
+export type LLMProvider = "anthropic" | "gemini" | "openai";
+
+function make(provider: LLMProvider, model: string, c: Config): LLM {
+  if (provider === "gemini") return new GeminiLLM(c.GEMINI_API_KEY!, model);
+  if (provider === "openai") return new OpenAICompatibleLLM(c.OPENAI_API_KEY!, model, c.OPENAI_BASE_URL!);
+  return new AnthropicLLM(c.ANTHROPIC_API_KEY!, model);
 }
+
+const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
+  anthropic: "claude-sonnet-5-5",
+  gemini: "gemini-2.5-flash",
+  openai: "gpt-5-mini",
+};
 
 export function createLLM(c: Config, onFallback?: ConstructorParameters<typeof RoutedLLM>[1]): RoutedLLM {
   const strong = make(c.LLM_PROVIDER, c.LLM_MODEL_RESOLVED, c);
   const fast = c.ROUTER && c.LLM_MODEL_FAST_RESOLVED !== c.LLM_MODEL_RESOLVED ? make(c.LLM_PROVIDER, c.LLM_MODEL_FAST_RESOLVED, c) : undefined;
   const fallbacks: LLM[] = [];
   if (c.FALLBACK_PROVIDER) {
-    const key = c.FALLBACK_PROVIDER === "gemini" ? c.GEMINI_API_KEY : c.ANTHROPIC_API_KEY;
-    if (key) fallbacks.push(make(c.FALLBACK_PROVIDER, c.FALLBACK_MODEL ?? (c.FALLBACK_PROVIDER === "gemini" ? "gemini-2.5-flash" : "claude-sonnet-5-5"), c));
+    const key = c.FALLBACK_PROVIDER === "gemini" ? c.GEMINI_API_KEY : c.FALLBACK_PROVIDER === "openai" ? c.OPENAI_API_KEY : c.ANTHROPIC_API_KEY;
+    if (key) fallbacks.push(make(c.FALLBACK_PROVIDER, c.FALLBACK_MODEL ?? FALLBACK_DEFAULT_MODEL[c.FALLBACK_PROVIDER], c));
   }
   return new RoutedLLM({ strong, fast, fallbacks }, onFallback);
 }

@@ -37,10 +37,13 @@ const str = (d?: string) => z.string().optional().transform((v) => (v && v.trim(
 
 const schema = z.object({
   BOT_TOKEN: z.string().min(20, "BOT_TOKEN is required"),
-  LLM_PROVIDER: z.enum(["anthropic", "gemini"]).optional().transform((v) => v ?? "anthropic"),
+  LLM_PROVIDER: z.enum(["anthropic", "gemini", "openai"]).optional().transform((v) => v ?? "anthropic"),
   LLM_MODEL: str(),
   ANTHROPIC_API_KEY: str(),
   GEMINI_API_KEY: str(),
+  // --- OpenAI-compatible providers (OpenAI, DeepSeek, Groq, OpenRouter, Mistral, Together, xAI, Cloudflare Workers AI, Ollama, LM Studio...) ---
+  // Base URL of the /v1 API, e.g. https://api.deepseek.com/v1
+  OPENAI_BASE_URL: str("https://api.openai.com/v1"),
   ADMIN_IDS: csvIds,
   TRUSTED_IDS: csvIds,
   PUBLIC_ACCESS: bool(true),
@@ -61,7 +64,7 @@ const schema = z.object({
   // --- model routing, fallback, cost ---
   LLM_MODEL_FAST: str(),
   ROUTER: bool(true),
-  FALLBACK_PROVIDER: z.enum(["anthropic", "gemini"]).optional(),
+  FALLBACK_PROVIDER: z.enum(["anthropic", "gemini", "openai"]).optional(),
   FALLBACK_MODEL: str(),
   MODEL_PRICES: str(),
   DAILY_BUDGET_USD: z.string().optional().transform((v) => (v ? Number(v) : 0)).pipe(z.number().min(0)),
@@ -137,10 +140,14 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const c = parsed.data;
   if (c.LLM_PROVIDER === "anthropic" && !c.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic");
   if (c.LLM_PROVIDER === "gemini" && !c.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is required when LLM_PROVIDER=gemini");
+  if (c.LLM_PROVIDER === "openai" && !c.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required when LLM_PROVIDER=openai");
+  if (c.FALLBACK_PROVIDER === "openai" && !c.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required when FALLBACK_PROVIDER=openai");
   if (c.WEBHOOK_URL && !/^https:\/\//i.test(c.WEBHOOK_URL)) throw new Error("WEBHOOK_URL must start with https://");
   const names = [...new Set([c.BOT_NAME!, ...(c.BOT_NAMES ?? "").split(",")].map((x) => x.trim()).filter(Boolean))];
-  const model = c.LLM_MODEL ?? (c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : "gemini-2.5-flash");
-  const fast = c.LLM_MODEL_FAST ?? (c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : "gemini-2.5-flash-lite");
+  const defaultModel = c.LLM_PROVIDER === "anthropic" ? "claude-sonnet-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash" : "gpt-5-mini";
+  const defaultFast = c.LLM_PROVIDER === "anthropic" ? "claude-haiku-5-5" : c.LLM_PROVIDER === "gemini" ? "gemini-2.5-flash-lite" : "gpt-5-nano";
+  const model = c.LLM_MODEL ?? defaultModel;
+  const fast = c.LLM_MODEL_FAST ?? defaultFast;
   const dataDir = path.resolve(c.DATA_DIR!);
   return { ...c, LLM_MODEL_RESOLVED: model, LLM_MODEL_FAST_RESOLVED: fast, DATA_DIR_ABS: dataDir, BOT_NAME_LIST: names, MCP_CONFIG_PATH: c.MCP_CONFIG ? path.resolve(c.MCP_CONFIG) : path.join(dataDir, "mcp.json") };
 }
