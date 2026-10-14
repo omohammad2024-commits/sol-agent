@@ -9,7 +9,7 @@ import { effectiveLlmView, getLlmSettings, OPENAI_PRESETS, PROVIDER_OPTIONS, set
 import { log } from "./log";
 import type { McpManager } from "./mcp";
 import { dayKey } from "./pricing";
-import type { Level, LevelOf } from "./types";
+import type { LevelOf } from "./types";
 
 export interface InitUser { id: number; first_name?: string; username?: string }
 
@@ -156,4 +156,3 @@ export function createPanelHandler(p: PanelDeps): (req: Request) => Promise<Resp
     }
   };
 }
-void (null as unknown as Level);

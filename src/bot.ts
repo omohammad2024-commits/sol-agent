@@ -6,6 +6,7 @@ import { runAgent, spentToday, type AgentDeps } from "./agent";
 import { getGroupCfg, isChatAdmin, moderate, welcomeText } from "./groups";
 import { buildContext, createIO } from "./io";
 import { LiveReply } from "./live";
+import { friendlyLlmError } from "./llm/errors";
 import { log } from "./log";
 import { sttAvailable, transcribe } from "./stt";
 import { maybeSummarize } from "./summarizer";
@@ -207,7 +208,7 @@ export function createBot(deps: AgentDeps, opts: CreateBotOptions = {}) {
     } catch (e) {
       await live.abort();
       log.error("agent_error", { chat: chatId, user: from.id, error: e });
-      await bot.api.sendMessage(chatId, "⚠️ یه خطا پیش اومد. دوباره امتحان کن.").catch(() => {});
+      await bot.api.sendMessage(chatId, `⚠️ ${friendlyLlmError(e)}`).catch(() => {});
     } finally {
       clearInterval(typing);
     }

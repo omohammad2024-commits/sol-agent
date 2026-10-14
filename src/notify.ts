@@ -1,5 +1,6 @@
 import type { Api } from "grammy";
 import type { Config } from "./config";
+import { ownerErrorSummary } from "./llm/errors";
 import { addLogSink } from "./log";
 import { truncate } from "./util";
 
@@ -23,7 +24,6 @@ export function createNotifier(api: Api, config: Config, redact: (s: string) => 
 export function notifyOnErrors(notify: (key: string, text: string) => void) {
   addLogSink((_line, level, event, fields) => {
     if (level !== "error") return;
-    const err = fields.error as any;
-    notify(`err:${event}`, `🚨 ${event}${err?.message ? `: ${err.message}` : ""}`);
+    notify(`err:${event}`, truncate(ownerErrorSummary(event, fields.error), 3500));
   });
 }

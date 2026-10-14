@@ -468,7 +468,9 @@ describe("owner notifications", () => {
     notifyOnErrors((k, t) => seen.push(`${k}|${t}`));
     log.error("boom_event", { error: new Error("kaput") });
     log.info("fine");
-    expect(seen).toEqual(["err:boom_event|🚨 boom_event: kaput"]);
+    expect(seen.length).toBe(1);
+    expect(seen[0]).toContain("err:boom_event|🚨 boom_event");
+    expect(seen[0]).toContain("یه خطا پیش اومد"); // Persian-friendly, not the raw "kaput" dump
     void addLogSink;
   });
 });
@@ -520,5 +522,22 @@ describe("LLM settings (admin panel)", () => {
     expect(view.model).toBe("deepseek-chat");
     expect(view.isOverridden).toBe(true);
     s.close();
+  });
+});
+
+describe("LLM error translation", () => {
+  test("friendlyLlmError maps known errors to Persian", async () => {
+    const { friendlyLlmError, ownerErrorSummary } = await import("../src/llm/errors");
+    expect(friendlyLlmError(new Error('HTTP 403: {"type":"FreeTierError"}'))).toContain("OpenCode");
+    expect(friendlyLlmError(new Error("401 Unauthorized"))).toContain("کلید API");
+    expect(friendlyLlmError(new Error("429 rate limit exceeded"))).toContain("محدودیت");
+    expect(friendlyLlmError(new Error("model_not_found"))).toContain("مدل");
+    expect(friendlyLlmError(new Error("fetch failed"))).toContain("اتصال");
+    const generic = friendlyLlmError(new Error("some weird thing happened"));
+    expect(generic).toContain("یه خطا پیش اومد");
+    expect(generic.length).toBeLessThan(250);
+    const summary = ownerErrorSummary("agent_error", new Error("401 bad key"));
+    expect(summary).toContain("🚨");
+    expect(summary).toContain("کلید API");
   });
 });
