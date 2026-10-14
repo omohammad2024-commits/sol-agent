@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>SOL — پنل مدیریت</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root{--bg:var(--tg-theme-bg-color,#fff);--fg:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#777);--btn:var(--tg-theme-button-color,#2481cc);--btnfg:var(--tg-theme-button-text-color,#fff);--card:var(--tg-theme-secondary-bg-color,#f2f2f2)}
+  *{box-sizing:border-box}body{margin:0;font-family:Vazirmatn,Tahoma,system-ui,sans-serif;background:var(--bg);color:var(--fg);padding:12px 12px 80px}
+  h1{font-size:18px;margin:4px 0 10px}nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px}nav button{flex:none}
+  button{background:var(--card);color:var(--fg);border:0;border-radius:10px;padding:8px 12px;font:inherit}button.on{background:var(--btn);color:var(--btnfg)}
+  .card{background:var(--card);border-radius:12px;padding:10px 12px;margin:8px 0}.row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #8882}
+  .row:last-child{border:0}.hint{color:var(--hint);font-size:12px}input,select{width:100%;padding:9px;border-radius:10px;border:1px solid #8884;background:var(--bg);color:var(--fg);font:inherit;margin:4px 0}
+  .primary{background:var(--btn);color:var(--btnfg)}.danger{background:#d33;color:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.num{font-size:20px;font-weight:700}
+  .err{color:#d33;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>🛰 SOL — پنل مدیریت</h1>
+<nav id="tabs"></nav>
+<div id="err" class="err"></div>
+<div id="view"></div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const TABS = [["overview","نمای کلی"],["users","کاربران"],["rules","قوانین"],["tools","ابزارها"],["costs","هزینه"],["log","لاگ"]];
+let tab = "overview";
+const view = document.getElementById("view"), errBox = document.getElementById("err");
+
+async function api(path, body) {
+  const res = await fetch("/panel/api/" + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "x-tg-init-data": tg ? tg.initData : "", "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+function el(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) { if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); }
+  for (const kid of kids.flat()) e.append(kid instanceof Node ? kid : document.createTextNode(String(kid ?? "")));
+  return e;
+}
+const card = (...k) => el("div", { class: "card" }, ...k);
+const row = (...k) => el("div", { class: "row" }, ...k);
+function tabs() {
+  const nav = document.getElementById("tabs"); nav.replaceChildren();
+  for (const [id, name] of TABS) nav.append(el("button", { class: id === tab ? "on" : "", onclick: () => { tab = id; render(); } }, name));
+}
+async function act(fn) { errBox.textContent = ""; try { await fn(); } catch (e) { errBox.textContent = e.message; } render(); }
+
+const views = {
+  async overview() {
+    const o = await api("overview");
+    const stat = (n, l) => el("div", { class: "card" }, el("div", { class: "num" }, n), el("div", { class: "hint" }, l));
+    return [
+      el("div", { class: "grid" }, stat(o.users, "کاربر"), stat(o.messages, "پیام ذخیره‌شده"), stat(o.memories, "حافظه"), stat(o.episodes, "خلاصه‌ی گفتگو"), stat(o.activeJobs, "کار زمان‌بندی‌شده"), stat(o.tools, "ابزار")),
+      card(row("مدل", o.model), row("مدل سریع", o.fast_model || "—"), row("آپتایم (دقیقه)", o.uptime_min), row("هزینه‌ی امروز (تخمینی)", "$" + o.cost_today_usd), row("درخواست LLM امروز", o.calls_today)),
+      card(el("b", {}, "MCP"), ...(o.mcp.length ? o.mcp.map((m) => row(m.name, m.tools.length + " ابزار")) : [el("div", { class: "hint" }, "سروری وصل نیست")])),
+      el("button", { class: "primary", onclick: () => act(async () => { const r = await api("backup", {}); alert("بکاپ: " + r.file + (r.problems.length ? "\n" + r.problems.join("\n") : "")); }) }, "💾 بکاپ همین حالا"),
+    ];
+  },
+  async users() {
+    const list = await api("users");
+    const id = el("input", { placeholder: "آیدی عددی کاربر", inputmode: "numeric" });
+    const sel = el("select", {}, ...[["grant","trusted بده"],["ban","بن"],["revoke","برگردون به عادی / رفع بن"],["make_admin","ادمین کن (فقط سازنده)"]].map(([v, t]) => el("option", { value: v }, t)));
+    return [
+      card(el("b", {}, "تغییر دسترسی"), id, sel, el("button", { class: "primary", onclick: () => act(() => api("access", { action: sel.value, user_id: Number(id.value) })) }, "اعمال")),
+      card(...list.map((u) => row(el("span", {}, (u.name || "?") + (u.username ? " @" + u.username : ""), el("div", { class: "hint" }, u.id + " · " + u.messages + " پیام")), el("span", { class: "hint" }, u.level)))),
+    ];
+  },
+  async rules() {
+    const rules = await api("rules");
+    const t = el("input", { placeholder: "قانون جدید…" });
+    return [
+      card(t, el("button", { class: "primary", onclick: () => act(() => api("rules/add", { text: t.value })) }, "افزودن")),
+      card(...(rules.length ? rules.map((r, i) => row(el("span", {}, (i + 1) + ". " + r), el("button", { class: "danger", onclick: () => act(() => api("rules/remove", { number: i + 1 })) }, "حذف"))) : [el("div", { class: "hint" }, "قانونی تعریف نشده")])),
+    ];
+  },
+  async tools() {
+    const tools = await api("tools");
+    return [card(...tools.map((t) => row(el("span", {}, t.name + (t.powerful ? " ⚠" : ""), el("div", { class: "hint" }, t.level)), el("button", { class: t.on ? "on" : "", onclick: () => act(() => api("tools/toggle", { name: t.name, on: !t.on })) }, t.on ? "روشن" : "خاموش"))))];
+  },
+  async costs() {
+    const c = await api("costs?period=7d");
+    return [
+      card(row("درخواست‌ها (۷ روز)", c.summary.calls), row("هزینه‌ی تخمینی", "$" + Number(c.summary.cost).toFixed(3)), row("درخواست بدون قیمت", c.summary.unpriced || 0)),
+      card(el("b", {}, "به‌تفکیک مدل"), ...c.by_model.map((m) => row(m.model, m.calls + " · $" + Number(m.cost).toFixed(3)))),
+      card(el("b", {}, "پرمصرف‌ترین کاربران"), ...c.top_users.map((u) => row(String(u.user_id), u.calls + " · $" + Number(u.cost).toFixed(3)))),
+    ];
+  },
+  async log() {
+    const l = await api("log");
+    return [card(...l.map((r) => row(el("span", {}, r.tool + " " + (r.ok ? "✅" : "❌"), el("div", { class: "hint" }, new Date(r.ts).toLocaleString("fa-IR") + " · u" + r.user_id)), el("span", { class: "hint" }, r.ms + "ms"))))];
+  },
+};
+async function render() {
+  tabs(); view.replaceChildren(el("div", { class: "hint" }, "…"));
+  try { view.replaceChildren(...(await views[tab]())); } catch (e) { view.replaceChildren(); errBox.textContent = e.message === "unauthorized" ? "فقط از داخل تلگرام و با اکانت ادمین باز می‌شه." : e.message; }
+}
+render();
+</script>
+</body>
+</html>
