@@ -14,8 +14,6 @@ export const PRESET_BASE_URLS: Record<string, string> = {
   kimi: "https://api.kimi.com/coding/v1", // Moonshot Kimi Code gateway
   kilo: "https://api.kilo.ai/api/gateway", // Kilo Code gateway (vendor/model)
   cloudflare: "https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/v1",
-  ollama: "http://localhost:11434/v1",
-  lmstudio: "http://localhost:1234/v1",
   // "custom": set OPENAI_BASE_URL to any other OpenAI-compatible endpoint
 };
 
