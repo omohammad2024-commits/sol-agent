@@ -1,0 +1,17 @@
+{
+  "servers": [
+    {
+      "name": "files",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data/shared"],
+      "level": "admin"
+    },
+    {
+      "name": "notes",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" },
+      "level": "trusted",
+      "powerful": ["delete_note"]
+    }
+  ]
+}
