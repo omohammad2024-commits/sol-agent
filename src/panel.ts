@@ -4,6 +4,8 @@ import path from "node:path";
 import { applyAccess, type AccessAction } from "./access";
 import type { AgentDeps } from "./agent";
 import { runBackup } from "./backup";
+import { buildRoutedLlm, resolveLlm } from "./llm";
+import { effectiveLlmView, getLlmSettings, OPENAI_PRESETS, PROVIDER_OPTIONS, setLlmSettings, validateLlmSettings, type LlmSettings } from "./llm/settings";
 import { log } from "./log";
 import type { McpManager } from "./mcp";
 import { dayKey } from "./pricing";
@@ -38,7 +40,7 @@ const SECURITY_HEADERS = {
 };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...SECURITY_HEADERS } });
 
-export interface PanelDeps { deps: AgentDeps; levelOf: LevelOf; getMcp: () => McpManager | null; api: any; htmlFile?: string }
+export interface PanelDeps { deps: AgentDeps; levelOf: LevelOf; getMcp: () => McpManager | null; api: any; htmlFile?: string; reloadLlm?: () => void }
 
 /** Telegram Mini App admin panel. Returns null for paths that are not the panel's. */
 export function createPanelHandler(p: PanelDeps): (req: Request) => Promise<Response | null> {
@@ -95,6 +97,8 @@ export function createPanelHandler(p: PanelDeps): (req: Request) => Promise<Resp
             const since = dayKey(now - (days - 1) * 86_400_000, config.TIMEZONE!);
             return json({ since, summary: store.usageSummary(since), by_model: store.usageByModel(since), by_day: store.usageByDay(since), top_users: store.topSpenders(since, 8) });
           }
+          case "llm":
+            return json({ current: effectiveLlmView(config, getLlmSettings(store)), providers: PROVIDER_OPTIONS, presets: OPENAI_PRESETS });
         }
       } else if (req.method === "POST") {
         const b = await body();
@@ -117,6 +121,31 @@ export function createPanelHandler(p: PanelDeps): (req: Request) => Promise<Resp
           case "backup": {
             const r = await runBackup(store, config, p.api);
             return json({ file: path.basename(r.result.file), bytes: r.result.bytes, encrypted: r.result.encrypted, sent_to_owner: r.sentToOwner, problems: r.errors });
+          }
+          case "llm/save": {
+            const s: LlmSettings = {};
+            for (const k of ["provider", "model", "modelFast", "baseUrl", "apiKey", "fallbackProvider", "fallbackModel"] as const) {
+              const v = typeof b[k] === "string" ? b[k].trim() : "";
+              if (v) (s as any)[k] = v;
+            }
+            const err = validateLlmSettings(s);
+            if (err) return json({ error: err }, 400);
+            // Empty fields mean "keep env default". To clear an override, use llm/reset.
+            setLlmSettings(store, { ...getLlmSettings(store), ...s });
+            try {
+              if (p.reloadLlm) p.reloadLlm();
+              else buildRoutedLlm(resolveLlm(config, getLlmSettings(store)), config); // dry-run: validates the new settings
+            } catch (e) {
+              return json({ error: e instanceof Error ? e.message : "reload failed" }, 400);
+            }
+            return json({ ok: true, current: effectiveLlmView(config, getLlmSettings(store)) });
+          }
+          case "llm/reset": {
+            setLlmSettings(store, {});
+            try { p.reloadLlm?.(); } catch (e) {
+              return json({ error: e instanceof Error ? e.message : "reload failed" }, 400);
+            }
+            return json({ ok: true, current: effectiveLlmView(config, getLlmSettings(store)) });
           }
         }
       }

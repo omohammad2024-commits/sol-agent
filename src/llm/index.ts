@@ -50,6 +50,19 @@ export class RoutedLLM implements LLM {
 
 export type LLMProvider = "anthropic" | "gemini" | "openai";
 
+/**
+ * Hot-swappable LLM: delegates every chat() to the current inner LLM.
+ * The admin panel rebuilds the inner instance when settings change — no restart needed.
+ */
+export class SwappableLLM implements LLM {
+  name = "swappable";
+  private current: LLM;
+  constructor(initial: LLM) { this.current = initial; }
+  swap(next: LLM) { this.current = next; this.name = (next as any).name ?? "swappable"; }
+  get inner(): LLM { return this.current; }
+  chat(req: LLMRequest): Promise<LLMResponse> { return this.current.chat(req); }
+}
+
 function make(provider: LLMProvider, model: string, c: Config): LLM {
   if (provider === "gemini") return new GeminiLLM(c.GEMINI_API_KEY!, model);
   if (provider === "openai") return new OpenAICompatibleLLM(c.OPENAI_API_KEY!, model, c.OPENAI_BASE_URL!);
@@ -62,13 +75,73 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   openai: "gpt-5-mini",
 };
 
-export function createLLM(c: Config, onFallback?: ConstructorParameters<typeof RoutedLLM>[1]): RoutedLLM {
-  const strong = make(c.LLM_PROVIDER, c.LLM_MODEL_RESOLVED, c);
-  const fast = c.ROUTER && c.LLM_MODEL_FAST_RESOLVED !== c.LLM_MODEL_RESOLVED ? make(c.LLM_PROVIDER, c.LLM_MODEL_FAST_RESOLVED, c) : undefined;
+const STRONG_DEFAULT_MODEL: Record<LLMProvider, string> = {
+  anthropic: "claude-sonnet-5-5",
+  gemini: "gemini-2.5-flash",
+  openai: "gpt-5-mini",
+};
+
+const FAST_DEFAULT_MODEL: Record<LLMProvider, string> = {
+  anthropic: "claude-haiku-5-5",
+  gemini: "gemini-2.5-flash-lite",
+  openai: "gpt-5-nano",
+};
+
+export interface ResolvedLlm {
+  provider: LLMProvider;
+  model: string;
+  modelFast: string;
+  baseUrl?: string;
+  apiKey?: string;
+  fallbackProvider?: LLMProvider;
+  fallbackModel?: string;
+}
+
+/** Merge DB overrides (from the admin panel) over env config. */
+export function resolveLlm(c: Config, s: { provider?: LLMProvider; model?: string; modelFast?: string; baseUrl?: string; apiKey?: string; fallbackProvider?: LLMProvider; fallbackModel?: string }): ResolvedLlm {
+  const provider = s.provider ?? c.LLM_PROVIDER;
+  const model = s.model || (s.provider && s.provider !== c.LLM_PROVIDER ? STRONG_DEFAULT_MODEL[provider] : c.LLM_MODEL_RESOLVED);
+  const modelFast = s.modelFast || (s.provider && s.provider !== c.LLM_PROVIDER ? FAST_DEFAULT_MODEL[provider] : c.LLM_MODEL_FAST_RESOLVED);
+  return {
+    provider,
+    model,
+    modelFast,
+    baseUrl: provider === "openai" ? s.baseUrl || c.OPENAI_BASE_URL : undefined,
+    apiKey: provider === "openai" ? s.apiKey || c.OPENAI_API_KEY : undefined,
+    fallbackProvider: s.fallbackProvider ?? c.FALLBACK_PROVIDER ?? undefined,
+    fallbackModel: s.fallbackModel || c.FALLBACK_MODEL || undefined,
+  };
+}
+
+function makeFromResolved(r: ResolvedLlm, c: Config): LLM {
+  if (r.provider === "gemini") return new GeminiLLM(c.GEMINI_API_KEY!, r.model);
+  if (r.provider === "openai") {
+    if (!r.apiKey) throw new Error("OPENAI_API_KEY (or panel API key) is required for the openai provider");
+    return new OpenAICompatibleLLM(r.apiKey, r.model, r.baseUrl!);
+  }
+  return new AnthropicLLM(c.ANTHROPIC_API_KEY!, r.model);
+}
+
+/** Build the full routed LLM from resolved settings (used at startup and on panel save). */
+export function buildRoutedLlm(r: ResolvedLlm, c: Config, onFallback?: ConstructorParameters<typeof RoutedLLM>[1]): RoutedLLM {
+  const strong = makeFromResolved(r, c);
+  const fast = c.ROUTER && r.modelFast !== r.model
+    ? makeFromResolved({ ...r, model: r.modelFast }, c)
+    : undefined;
   const fallbacks: LLM[] = [];
-  if (c.FALLBACK_PROVIDER) {
-    const key = c.FALLBACK_PROVIDER === "gemini" ? c.GEMINI_API_KEY : c.FALLBACK_PROVIDER === "openai" ? c.OPENAI_API_KEY : c.ANTHROPIC_API_KEY;
-    if (key) fallbacks.push(make(c.FALLBACK_PROVIDER, c.FALLBACK_MODEL ?? FALLBACK_DEFAULT_MODEL[c.FALLBACK_PROVIDER], c));
+  if (r.fallbackProvider) {
+    const fm = r.fallbackModel || FALLBACK_DEFAULT_MODEL[r.fallbackProvider];
+    try {
+      fallbacks.push(makeFromResolved({
+        provider: r.fallbackProvider, model: fm, modelFast: fm,
+        baseUrl: r.fallbackProvider === "openai" ? r.baseUrl : undefined,
+        apiKey: r.fallbackProvider === "openai" ? r.apiKey : undefined,
+      }, c));
+    } catch { /* missing key -> skip fallback */ }
   }
   return new RoutedLLM({ strong, fast, fallbacks }, onFallback);
+}
+
+export function createLLM(c: Config, onFallback?: ConstructorParameters<typeof RoutedLLM>[1]): RoutedLLM {
+  return buildRoutedLlm(resolveLlm(c, {}), c, onFallback);
 }

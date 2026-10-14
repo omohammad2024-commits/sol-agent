@@ -24,7 +24,7 @@
 <script>
 const tg = window.Telegram && Telegram.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
-const TABS = [["overview","نمای کلی"],["users","کاربران"],["rules","قوانین"],["tools","ابزارها"],["costs","هزینه"],["log","لاگ"]];
+const TABS = [["overview","نمای کلی"],["models","مدل‌ها"],["users","کاربران"],["rules","قوانین"],["tools","ابزارها"],["costs","هزینه"],["log","لاگ"]];
 let tab = "overview";
 const view = document.getElementById("view"), errBox = document.getElementById("err");
 
@@ -61,6 +61,57 @@ const views = {
       card(row("مدل", o.model), row("مدل سریع", o.fast_model || "—"), row("آپتایم (دقیقه)", o.uptime_min), row("هزینه‌ی امروز (تخمینی)", "$" + o.cost_today_usd), row("درخواست LLM امروز", o.calls_today)),
       card(el("b", {}, "MCP"), ...(o.mcp.length ? o.mcp.map((m) => row(m.name, m.tools.length + " ابزار")) : [el("div", { class: "hint" }, "سروری وصل نیست")])),
       el("button", { class: "primary", onclick: () => act(async () => { const r = await api("backup", {}); alert("بکاپ: " + r.file + (r.problems.length ? "\n" + r.problems.join("\n") : "")); }) }, "💾 بکاپ همین حالا"),
+    ];
+  },
+  async models() {
+    const d = await api("llm");
+    const cur = d.current;
+    const prov = el("select", {}, ...d.providers.map((p) => el("option", { value: p.value, selected: p.value === cur.provider ? "selected" : undefined }, p.label)));
+    const model = el("input", { placeholder: "مدل قوی (خالی = پیش‌فرض)", value: "" });
+    const modelFast = el("input", { placeholder: "مدل سریع (خالی = پیش‌فرض)", value: "" });
+    const preset = el("select", {}, ...d.presets.map((p) => el("option", { value: p.baseUrl }, p.label + (p.free ? " 🆓" : ""))));
+    const baseUrl = el("input", { placeholder: "Base URL (مثلا https://api.deepseek.com/v1)", value: "", dir: "ltr" });
+    const apiKey = el("input", { placeholder: cur.apiKeyMasked ? ("کلید فعلی: " + cur.apiKeyMasked + " (خالی = بدون تغییر)") : "API Key", value: "", dir: "ltr", type: "password" });
+    const fbProv = el("select", {}, el("option", { value: "" }, "بدون جایگزین"), ...d.providers.map((p) => el("option", { value: p.value, selected: p.value === cur.fallbackProvider ? "selected" : undefined }, p.label)));
+    const fbModel = el("input", { placeholder: "مدل جایگزین (خالی = پیش‌فرض)", value: "" });
+    const openaiBox = el("div", {});
+    const syncOpenAI = () => {
+      const isOpenAI = prov.value === "openai";
+      openaiBox.replaceChildren(...(isOpenAI ? [
+        card(el("b", {}, "پروایدر OpenAI-compatible"),
+          el("div", { class: "hint" }, "preset:"),
+          preset,
+          el("div", { class: "hint" }, "یا دستی:"),
+          baseUrl, apiKey),
+      ] : []));
+    };
+    prov.addEventListener("change", syncOpenAI);
+    preset.addEventListener("change", () => { if (preset.value) baseUrl.value = preset.value; });
+    // prefill preset matching current baseUrl
+    if (cur.baseUrl) { const m = d.presets.find((p) => p.baseUrl === cur.baseUrl); if (m) preset.value = m.baseUrl; baseUrl.value = cur.baseUrl; }
+    syncOpenAI();
+    const save = () => act(async () => {
+      const r = await api("llm/save", {
+        provider: prov.value, model: model.value, modelFast: modelFast.value,
+        baseUrl: prov.value === "openai" ? baseUrl.value : "",
+        apiKey: prov.value === "openai" ? apiKey.value : "",
+        fallbackProvider: fbProv.value, fallbackModel: fbModel.value,
+      });
+      alert("✅ ذخیره شد و بدون ری‌استارت اعمال شد.\nمدل فعلی: " + r.current.provider + "/" + r.current.model);
+    });
+    return [
+      card(el("b", {}, "🤖 پروایدر و مدل"),
+        el("div", { class: "hint" }, "فعلی: " + cur.provider + " / " + cur.model + (cur.isOverridden ? " (از پنل تنظیم شده)" : " (از env)")),
+        el("div", { class: "hint" }, "پروایدر:"),
+        prov,
+        el("div", { class: "hint" }, "مدل‌ها (خالی = پیش‌فرض پروایدر):"),
+        model, modelFast),
+      openaiBox,
+      card(el("b", {}, "جایگزین خودکار (fallback)"),
+        el("div", { class: "hint" }, "اگه پروایدر اصلی خطا بده:"),
+        fbProv, fbModel),
+      el("button", { class: "primary", onclick: save }, "💾 ذخیره و اعمال"),
+      el("button", { onclick: () => act(async () => { await api("llm/reset", {}); alert("برگشت به تنظیمات env"); }) }, "↩️ برگشت به env"),
     ];
   },
   async users() {

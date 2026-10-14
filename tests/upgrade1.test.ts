@@ -472,3 +472,53 @@ describe("owner notifications", () => {
     void addLogSink;
   });
 });
+
+describe("LLM settings (admin panel)", () => {
+  test("validateLlmSettings rejects bad input", async () => {
+    const { validateLlmSettings } = await import("../src/llm/settings");
+    expect(validateLlmSettings({ provider: "nope" as any })).toBe("unknown provider");
+    expect(validateLlmSettings({ provider: "openai", baseUrl: "ftp://x" })).toContain("base URL");
+    expect(validateLlmSettings({ provider: "openai", apiKey: "short" })).toContain("too short");
+    expect(validateLlmSettings({ provider: "openai", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-valid-key-123" })).toBeNull();
+    expect(validateLlmSettings({ provider: "gemini", model: "gemini-2.5-flash" })).toBeNull();
+  });
+  test("resolveLlm merges DB overrides over env", async () => {
+    const { resolveLlm, SwappableLLM, buildRoutedLlm } = await import("../src/llm/index");
+    const c = cfg({ LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" });
+    // no overrides -> env
+    let r = resolveLlm(c, {});
+    expect(r.provider).toBe("anthropic");
+    expect(r.model).toBe(c.LLM_MODEL_RESOLVED);
+    // provider override -> new provider defaults
+    r = resolveLlm(c, { provider: "openai", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-12345678" });
+    expect(r.provider).toBe("openai");
+    expect(r.model).toBe("gpt-5-mini");
+    expect(r.baseUrl).toBe("https://api.deepseek.com/v1");
+    // explicit model wins
+    r = resolveLlm(c, { provider: "openai", model: "deepseek-chat", baseUrl: "https://api.deepseek.com/v1", apiKey: "sk-12345678" });
+    expect(r.model).toBe("deepseek-chat");
+    // SwappableLLM delegates and swaps
+    const mk = (name: string): any => ({ name, chat: async () => ({ parts: [{ type: "text", text: name }] }) });
+    const sw = new SwappableLLM(mk("a"));
+    expect((await sw.chat({ system: "", messages: [], tools: [] } as any)).parts[0]).toEqual({ type: "text", text: "a" });
+    sw.swap(mk("b"));
+    expect((await sw.chat({ system: "", messages: [], tools: [] } as any)).parts[0]).toEqual({ type: "text", text: "b" });
+    // buildRoutedLlm validates settings (missing openai key throws)
+    expect(() => buildRoutedLlm({ provider: "openai", model: "x", modelFast: "x", baseUrl: "https://x/v1" }, c)).toThrow("API key");
+    void buildRoutedLlm;
+  });
+  test("get/setLlmSettings round-trips in the store", async () => {
+    const { getLlmSettings, setLlmSettings, effectiveLlmView } = await import("../src/llm/settings");
+    const { Store } = await import("../src/memory/store");
+    const s = new Store(":memory:");
+    expect(getLlmSettings(s)).toEqual({});
+    setLlmSettings(s, { provider: "openai", model: "deepseek-chat" });
+    expect(getLlmSettings(s)).toEqual({ provider: "openai", model: "deepseek-chat" });
+    const c = cfg({ LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "k" });
+    const view = effectiveLlmView(c, getLlmSettings(s));
+    expect(view.provider).toBe("openai");
+    expect(view.model).toBe("deepseek-chat");
+    expect(view.isOverridden).toBe(true);
+    s.close();
+  });
+});
