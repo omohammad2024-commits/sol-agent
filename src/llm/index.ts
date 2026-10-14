@@ -75,14 +75,14 @@ function make(provider: LLMProvider, model: string, c: Config): LLM {
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   anthropic: "claude-sonnet-5-5",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-2.5-pro",
   openai: "gpt-5-mini",
   opencode: OPENCODE_DEFAULT_MODEL,
 };
 
 const STRONG_DEFAULT_MODEL: Record<LLMProvider, string> = {
   anthropic: "claude-sonnet-5-5",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-2.5-pro",
   openai: "gpt-5-mini",
   opencode: OPENCODE_DEFAULT_MODEL,
 };
