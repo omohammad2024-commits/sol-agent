@@ -6,8 +6,7 @@ import { loadSystemTemplate } from "./agent";
 import { startBackupScheduler } from "./backup";
 import { createBot } from "./bot";
 import { loadConfig, secretValues } from "./config";
-import { buildRoutedLlm, createLLM, resolveLlm, SwappableLLM } from "./llm";
-import { getLlmSettings } from "./llm/settings";
+import { createLLM } from "./llm";
 import { addLogSink, configureLogger, log } from "./log";
 import { startMaintenance } from "./maintenance";
 import { McpManager } from "./mcp";
@@ -32,16 +31,9 @@ process.on("uncaughtException", (e) => {
 fs.mkdirSync(path.join(config.DATA_DIR_ABS, "workspaces"), { recursive: true });
 const store = new Store(path.join(config.DATA_DIR_ABS, "sol.db"));
 let notify: (key: string, text: string) => void = () => {};
-const onFallback = (f: { from: string; to: string; error: string }) => {
+const llm = createLLM(config, (f) => {
   notify("llm_fallback", `⚠️ مدل اصلی خطا داد، رفتم سراغ جایگزین:\n${f.from} → ${f.to}\n${f.error}`);
-};
-// Hot-swappable LLM: the admin panel rebuilds it when provider/model settings change.
-const llm = new SwappableLLM(buildRoutedLlm(resolveLlm(config, getLlmSettings(store)), config, onFallback));
-/** Rebuild the LLM from current DB settings (called by the admin panel after save). */
-export function reloadLlm() {
-  llm.swap(buildRoutedLlm(resolveLlm(config, getLlmSettings(store)), config, onFallback));
-  log.info("llm_reloaded", {});
-}
+});
 let mcp: McpManager | null = null;
 const tools = buildTools(config, { getMcp: () => mcp });
 mcp = new McpManager(config, store, tools);
@@ -58,12 +50,14 @@ const stopMaintenance = startMaintenance(config.DATA_DIR_ABS);
 const stopBackup = startBackupScheduler(store, config, bot.api, notify);
 await mcp.connectAll();
 
-const panel = publicBase ? createPanelHandler({ deps, levelOf, getMcp: () => mcp, api: bot.api, reloadLlm }) : null;
+const panel = publicBase ? createPanelHandler({ deps, levelOf, getMcp: () => mcp, api: bot.api }) : null;
 const hash = (salt: string) => crypto.createHash("sha256").update(`${config.BOT_TOKEN}:${salt}`).digest("hex");
 const webhook = webhookMode ? { secret: config.WEBHOOK_SECRET ?? hash("webhook-secret").slice(0, 48), route: `/telegram/${hash("webhook-path").slice(0, 24)}` } : null;
 
 let server: ReturnType<typeof Bun.serve> | null = null;
-if (webhook || panel) {
+// Always serve: Railway healthchecks /health. Without a listener the
+// healthcheck fails and Railway kills/restarts the container in a loop.
+{
   const handleUpdate = webhook ? webhookCallback(bot, "std/http", { secretToken: webhook.secret }) : null;
   server = Bun.serve({
     port: config.PORT,
