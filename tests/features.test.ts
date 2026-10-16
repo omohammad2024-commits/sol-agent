@@ -15,9 +15,10 @@ import { buildTools } from "../src/tools";
 import { checkDangerous } from "../src/tools/exec";
 import { buildNameRegex, shouldRespond } from "../src/triggers";
 import type { ToolContext } from "../src/types";
+import { hasBash, rmrfQuiet } from "./helpers";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sol-feat-"));
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => rmrfQuiet(tmp));
 
 const OWNER = 1000, ADMIN = 2000, PUBLIC = 3000;
 const baseEnv = {
@@ -79,7 +80,8 @@ describe("exec denylist", () => {
 });
 
 describe("taint guard (no buttons, injection-safe)", () => {
-  test("risky tool is blocked after untrusted content was read in the same turn, allowed otherwise", async () => {
+  // turn 2 executes run_shell, which needs bash; skip on hosts without it.
+  test.skipIf(!hasBash)("risky tool is blocked after untrusted content was read in the same turn, allowed otherwise", async () => {
     const store = new Store(":memory:");
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async () => new Response(JSON.stringify({ query: { search: [] } }), { status: 200 })) as any;
@@ -124,7 +126,8 @@ describe("taint guard (no buttons, injection-safe)", () => {
       globalThis.fetch = realFetch;
     }
   });
-  test("non-tainting tools (read_file, run_python) do not block follow-up risky calls", async () => {
+  // run_python needs the bash sandbox; skip on hosts without it.
+  test.skipIf(!hasBash)("non-tainting tools (read_file, run_python) do not block follow-up risky calls", async () => {
     const store = new Store(":memory:");
     const ctx = ctxFor(store, ADMIN, "admin");
     fs.writeFileSync(path.join(ctx.workdir, "d.txt"), "data");

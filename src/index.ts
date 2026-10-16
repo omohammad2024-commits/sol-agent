@@ -7,7 +7,7 @@ import { startBackupScheduler } from "./backup";
 import { createBot } from "./bot";
 import { loadConfig, secretValues } from "./config";
 import { createLLM } from "./llm";
-import { addLogSink, configureLogger, log } from "./log";
+import { configureLogger, log } from "./log";
 import { startMaintenance } from "./maintenance";
 import { McpManager } from "./mcp";
 import { Store } from "./memory/store";
@@ -17,7 +17,6 @@ import { startScheduler } from "./scheduler";
 import { makeRedactor } from "./security";
 import { buildTools } from "./tools";
 
-void addLogSink;
 const startedAt = Date.now();
 const config = loadConfig();
 const redact = makeRedactor(secretValues(config));

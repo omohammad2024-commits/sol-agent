@@ -86,29 +86,40 @@ export class McpManager {
           env: { ...Object.fromEntries(SAFE_ENV_KEYS.filter((k) => process.env[k]).map((k) => [k, process.env[k]!])), ...(spec.env ?? {}) },
           stderr: "ignore",
         });
-    await Promise.race([client.connect(transport), new Promise((_, rej) => setTimeout(() => rej(new Error("connect timed out (20s)")), 20_000))]);
-    const listed = await client.listTools();
-    const level: Level = spec.level ?? "admin";
-    const powerful = new Set(spec.powerful ?? []);
-    const made: Tool[] = listed.tools.slice(0, 60).map((t: any) => {
-      const schema = t.inputSchema && t.inputSchema.type === "object" ? t.inputSchema : { type: "object", properties: {} };
-      return {
-        name: `mcp_${spec.name}_${String(t.name).replace(/[^a-zA-Z0-9_]/g, "_")}`.slice(0, 64),
-        description: `[${spec.name}] ${t.description ?? t.name}`.slice(0, 900),
-        parameters: { type: "object", properties: schema.properties ?? {}, required: schema.required ?? [] },
-        level,
-        untrusted: true,
-        taints: true,
-        risky: powerful.has(t.name) ? true : undefined,
-        async run(args: any) {
-          return flattenResult(await client.callTool({ name: t.name, arguments: args }));
-        },
-      } as Tool;
-    });
-    this.tools.push(...made);
-    this.live.set(spec.name, { spec, client, tools: made, source });
-    log.info("mcp_connected", { server: spec.name, tools: made.length });
-    return made.map((t) => t.name);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        client.connect(transport),
+        new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("connect timed out (20s)")), 20_000); }),
+      ]);
+      const listed = await client.listTools();
+      const level: Level = spec.level ?? "admin";
+      const powerful = new Set(spec.powerful ?? []);
+      const made: Tool[] = listed.tools.slice(0, 60).map((t: any) => {
+        const schema = t.inputSchema && t.inputSchema.type === "object" ? t.inputSchema : { type: "object", properties: {} };
+        return {
+          name: `mcp_${spec.name}_${String(t.name).replace(/[^a-zA-Z0-9_]/g, "_")}`.slice(0, 64),
+          description: `[${spec.name}] ${t.description ?? t.name}`.slice(0, 900),
+          parameters: { type: "object", properties: schema.properties ?? {}, required: schema.required ?? [] },
+          level,
+          untrusted: true,
+          taints: true,
+          risky: powerful.has(t.name) ? true : undefined,
+          async run(args: any) {
+            return flattenResult(await client.callTool({ name: t.name, arguments: args }));
+          },
+        } as Tool;
+      });
+      this.tools.push(...made);
+      this.live.set(spec.name, { spec, client, tools: made, source });
+      log.info("mcp_connected", { server: spec.name, tools: made.length });
+      return made.map((t) => t.name);
+    } catch (e) {
+      await client.close().catch(() => {});
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async remove(name: string): Promise<boolean> {

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { applyAccess } from "../access";
 import { runBackup } from "../backup";
 import type { McpManager } from "../mcp";
@@ -205,7 +206,7 @@ export function makeAdminTools(getTools: () => Tool[], getMcp: () => McpManager 
     async run(_a, ctx) {
       needPrivate(ctx);
       const r = await runBackup(ctx.store, ctx.config, ctx.api);
-      return { file: r.result.file.split("/").pop(), mb: +(r.result.bytes / 1048576).toFixed(2), encrypted: r.result.encrypted, sent_to_owner: r.sentToOwner, s3_key: r.s3Key, pruned_old: r.pruned, problems: r.errors };
+      return { file: path.basename(r.result.file), mb: +(r.result.bytes / 1048576).toFixed(2), encrypted: r.result.encrypted, sent_to_owner: r.sentToOwner, s3_key: r.s3Key, pruned_old: r.pruned, problems: r.errors };
     },
   };
 

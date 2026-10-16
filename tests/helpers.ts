@@ -82,3 +82,21 @@ export async function withFetch<T>(handler: (url: string, init: any) => Response
   globalThis.fetch = (async (u: any, init: any) => handler(String(u), init)) as any;
   try { return await fn(); } finally { globalThis.fetch = real; }
 }
+
+export const hasBash = !!Bun.which("bash");
+export const hasFfmpeg = !!Bun.which("ffmpeg");
+
+// Windows keeps file handles locked, so removing the shared temp root while any SQLite
+// handle is still open fails with EBUSY/EPERM. Retry briefly, then give up silently:
+// the directory lives in the OS temp folder and a leftover dir is harmless.
+export async function rmrfQuiet(dir: string): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (e: any) {
+      if (i >= 4 || !["EBUSY", "EPERM", "ENOTEMPTY"].includes(e?.code)) throw e;
+      await new Promise((r) => setTimeout(r, 120 * (i + 1)));
+    }
+  }
+}
