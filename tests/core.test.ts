@@ -13,9 +13,10 @@ import { buildTools } from "../src/tools";
 import { htmlToText } from "../src/tools/web";
 import type { Level, ToolContext } from "../src/types";
 import { chunkText, mdToHtml } from "../src/util";
+import { hasBash, rmrfQuiet } from "./helpers";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sol-test-"));
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => rmrfQuiet(tmp));
 
 const env = { BOT_TOKEN: "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ANTHROPIC_API_KEY: "sk-ant-test-key-123456", ADMIN_IDS: "1, 2", DATA_DIR: tmp };
 const config: Config = loadConfig(env);
@@ -188,7 +189,8 @@ describe("tools", () => {
     await expect(tools.set_reminder!.run({ text: "x", at: "2020-01-01T00:00:00Z" }, ctx)).rejects.toThrow(/past/);
     await expect(tools.set_reminder!.run({ text: "x", at: "garbage" }, ctx)).rejects.toThrow();
   });
-  test("run_python executes in local sandbox with stripped env", async () => {
+  // The local sandbox spawns bash; skip on hosts without it (deploy target has bash).
+  test.skipIf(!hasBash)("run_python executes in local sandbox with stripped env", async () => {
     const cfg = loadConfig({ ...env, SANDBOX_MODE: "local" });
     const ctx = { ...makeCtx(store, "admin", 1), config: cfg };
     process.env.SOL_SECRET_TEST = "leak-me";

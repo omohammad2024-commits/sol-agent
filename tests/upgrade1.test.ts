@@ -21,9 +21,9 @@ import { startScheduler } from "../src/scheduler";
 import { maybeSummarize } from "../src/summarizer";
 import { buildTools } from "../src/tools";
 import { recall } from "../src/tools/memory";
-import { OWNER, PUBLIC, ScriptedLLM, TRUSTED, ADMIN, callTool, cfg, config, ctxFor, mkDeps, say, sse, tmp, withFetch } from "./helpers";
+import { OWNER, PUBLIC, ScriptedLLM, TRUSTED, ADMIN, callTool, cfg, config, ctxFor, mkDeps, rmrfQuiet, say, sse, tmp, withFetch } from "./helpers";
 
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => rmrfQuiet(tmp));
 
 describe("migrations", () => {
   test("fresh DB reaches the latest schema version", () => {

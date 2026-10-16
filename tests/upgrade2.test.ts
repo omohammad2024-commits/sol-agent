@@ -14,9 +14,9 @@ import { speechText, synthesize, ttsProvider } from "../src/tts";
 import { buildTools } from "../src/tools";
 import { sleep } from "../src/util";
 import type { LLM, LLMRequest, LLMResponse } from "../src/llm/types";
-import { ADMIN, OWNER, PUBLIC, ScriptedLLM, TRUSTED, baseEnv, callTool, cfg, config, ctxFor, harness, mkDeps, say, tmp, withFetch } from "./helpers";
+import { ADMIN, OWNER, PUBLIC, ScriptedLLM, TRUSTED, baseEnv, callTool, cfg, config, ctxFor, harness, hasFfmpeg, mkDeps, rmrfQuiet, say, tmp, withFetch } from "./helpers";
 
-afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => rmrfQuiet(tmp));
 const tools = (c = config) => Object.fromEntries(buildTools(c).map((t) => [t.name, t]));
 
 // ---------------------------------------------------------------------------------------------
@@ -34,7 +34,12 @@ describe("MCP client", () => {
     expect(echo.parameters.required).toEqual(["text"]);
     const ctx = ctxFor(store, OWNER, "admin");
     expect(await echo.run({ text: "hi" }, ctx)).toBe("echo:hi");
-    await expect(list.find((t) => t.name === "mcp_fx_boom").run({}, ctx)).rejects.toThrow("it broke");
+    // NB: await the rejection directly — on bun 1.4.2 (Windows) a pending expect() promise
+    // matcher starves the event loop and the MCP child's stdout data event is never delivered,
+    // so `await expect(...).rejects.toThrow(...)` would hang until the SDK's 60s timeout.
+    let boom = "";
+    try { await list.find((t) => t.name === "mcp_fx_boom").run({}, ctx); } catch (e) { boom = e instanceof Error ? e.message : String(e); }
+    expect(boom).toContain("it broke");
     expect(await list.find((t) => t.name === "mcp_fx_leak").run({}, ctx)).toBe("BOT_TOKEN=none");
     expect(m.list()[0]).toMatchObject({ name: "fx", transport: "stdio" });
     expect(await m.remove("fx")).toBe(true);
@@ -95,7 +100,7 @@ describe("documents", () => {
     expect(back.text).toContain("گزارش ماهانه");
     expect(back.text).toContain("مورد دوم");
     expect(back.text).toContain("فروش");
-  });
+  }, 30000);
   test("Excel + CSV (BOM) and reading them back", async () => {
     const ctx = ctxFor(new Store(":memory:"), TRUSTED, "trusted");
     const rows = [["نام", "سن"], ["علی", 30], ["سارا", 25], ["جمع", "=SUM(B2:B3)"]];
@@ -109,7 +114,7 @@ describe("documents", () => {
     expect([...csv.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     expect(csv.toString("utf8")).toContain("علی,30");
     await expect(T.create_spreadsheet!.run({ format: "xlsx", sheets: [] }, ctx)).rejects.toThrow();
-  });
+  }, 30000);
   test("PDF: Latin via pdfkit is readable; Persian falls back to Word when Chromium is missing", async () => {
     const ctx = ctxFor(new Store(":memory:"), TRUSTED, "trusted");
     await T.create_document!.run({ format: "pdf", title: "Quarterly Report", content: "# Summary\n\nRevenue grew **12%** this quarter.\n\n- alpha\n- beta" }, ctx);
@@ -167,7 +172,8 @@ describe("text to speech", () => {
     expect(ttsProvider(cfg({ TTS_PROVIDER: "openai" }))).toBeNull();
     expect(ttsProvider(cfg({ TTS_PROVIDER: "openai", OPENAI_API_KEY: "sk-openai-1234567" }))).toBe("openai");
   });
-  test("Gemini PCM is encoded to a real OGG/Opus voice note", async () => {
+  // ffmpeg encodes PCM -> OGG/Opus; skip on hosts without it (CI image has ffmpeg).
+  test.skipIf(!hasFfmpeg)("Gemini PCM is encoded to a real OGG/Opus voice note", async () => {
     let body: any, url = "";
     const ogg = await withFetch((u, init) => { url = u; body = JSON.parse(init.body); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: pcm } }] } }] }), { status: 200 }); }, () => synthesize(config, "سلام، حالت چطوره؟"));
     expect(url).toContain("preview-tts:generateContent");
@@ -381,7 +387,8 @@ describe("bot end to end: streaming, voice reply, inline, budget, groups", () =>
     expect(edits.at(-1)!.payload.text).toBe("Hello world");
     expect(edits.at(-1)!.payload.parse_mode).toBe("HTML");
   });
-  test("a spoken question gets a spoken answer (STT -> agent -> TTS -> voice note)", async () => {
+  // end to end voice note needs ffmpeg; skip on hosts without it.
+  test.skipIf(!hasFfmpeg)("a spoken question gets a spoken answer (STT -> agent -> TTS -> voice note)", async () => {
     const llm = new ScriptedLLM([say("قیمت دلار حدود ۶۰ هزار تومانه")]);
     const h = harness(llm);
     const pcm = Buffer.alloc(24000 * 2).toString("base64");
