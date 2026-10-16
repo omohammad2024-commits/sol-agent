@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isRtl, readDocument, toCsv, toDocx, toHtml, toPdfChromium, toPdfLatin, toXlsx, RTL_RE } from "../docs";
+import { readDocument, toCsv, toDocx, toHtml, toPdfChromium, toPdfLatin, toXlsx, RTL_RE } from "../docs";
 import { resolveSafe } from "../security";
 import type { Tool, ToolContext } from "../types";
 import { truncate } from "../util";
@@ -121,4 +121,3 @@ export const createSpreadsheet: Tool = {
 };
 
 export const docTools: Tool[] = [readDoc, ocrImage, createDocument, createSpreadsheet];
-void isRtl;

@@ -33,6 +33,13 @@ const int0 = (d: number) =>
     .transform((v) => (v ? parseInt(v, 10) : d))
     .pipe(z.number().int().min(0));
 
+const intRange = (d: number, min: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform((v) => (v ? parseInt(v, 10) : d))
+    .pipe(z.number().int().min(min).max(max));
+
 const str = (d?: string) => z.string().optional().transform((v) => (v && v.trim() !== "" ? v.trim() : d));
 
 const schema = z.object({
@@ -102,7 +109,7 @@ const schema = z.object({
   LOG_LEVEL: str(),
   LOG_FILE: str(),
   BACKUP_ENABLED: bool(true),
-  BACKUP_HOUR: int0(4),
+  BACKUP_HOUR: intRange(4, 0, 23),
   BACKUP_TO_OWNER: bool(true),
   BACKUP_KEEP_DAYS: int(14),
   BACKUP_PASSPHRASE: str(),

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
+import path from "node:path";
 import type { Config } from "../config";
 import type { Tool } from "../types";
 import { resolveSafe } from "../security";
@@ -100,7 +101,7 @@ export const virustotalScan: Tool = {
       if (!(e instanceof HttpError && e.status === 404)) throw e;
     }
     const form = new FormData();
-    form.append("file", new Blob([data]), full.split("/").pop()!);
+    form.append("file", new Blob([data]), path.basename(full));
     const sub = await vt(key, "POST", "/files", form);
     const attrs = await pollAnalysis(key, sub.data.id);
     if (!attrs) return { kind: "file", target: t, sha256: sha, verdict: "uploaded; analysis still running - ask again in a minute", report: `https://www.virustotal.com/gui/file/${sha}` };
