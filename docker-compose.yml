@@ -1,0 +1,28 @@
+services:
+  sol:
+    build:
+      context: .
+      args:
+        WITH_CHROMIUM: "false"   # true = JS-rendered browsing + Persian PDF export (bigger image)
+    restart: always
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      # Inside this container there is no Docker daemon, so code runs as the unprivileged
+      # `bun` user with a stripped environment (no tokens/keys visible). For stronger
+      # isolation run the bot directly on the host (systemd) with SANDBOX_MODE=docker.
+      SANDBOX_MODE: local
+    # Webhook mode and the admin panel: put a reverse proxy (Caddy/nginx) with HTTPS in front of this port.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - sol-data:/data
+    mem_limit: 1g
+    cpus: 1.5
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+volumes:
+  sol-data:
